@@ -9,18 +9,25 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 )
 
 func main() {
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
-	defer cancel()
-
 	err := godotenv.Load()
 	if err != nil {
 		panic(err)
 	}
 
-	bot := bot.NewBot(os.Getenv("BOT_TOKEN"))
+	db, err := gorm.Open(sqlite.Open("tg-stars.db"), &gorm.Config{})
+	if err != nil {
+		panic("failed to connect database")
+	}
+
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer cancel()
+
+	bot := bot.NewBot(os.Getenv("BOT_TOKEN"), db)
 
 	r := gin.Default()
 	r.GET("/health", handler.HealthHandler(bot))

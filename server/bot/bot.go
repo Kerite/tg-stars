@@ -2,11 +2,12 @@ package bot
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
+	botHandler "tg-stars/bot/handler"
+
 	"github.com/go-telegram/bot"
-	"github.com/go-telegram/bot/models"
+	"gorm.io/gorm"
 )
 
 type Bot interface {
@@ -17,11 +18,13 @@ type Bot interface {
 
 type botImpl struct {
 	bot *bot.Bot
+	db  *gorm.DB
 }
 
-func NewBot(botToken string) Bot {
+func NewBot(botToken string, db *gorm.DB) Bot {
+	bot_handler := botHandler.NewBotHandler(db)
 	opts := []bot.Option{
-		bot.WithDefaultHandler(handler),
+		bot.WithDefaultHandler(bot_handler.DefaultHandler),
 	}
 
 	b, err := bot.New(botToken, opts...)
@@ -31,10 +34,19 @@ func NewBot(botToken string) Bot {
 
 	bot_impl := botImpl{
 		bot: b,
+		db:  db,
 	}
 
-	b.RegisterHandler(bot.HandlerTypeMessageText, "/start", bot.MatchTypeExact, startHandler)
-	b.RegisterHandler(bot.HandlerTypeMessageText, "/donate", bot.MatchTypeExact, bot_impl.donateHandler)
+	b.RegisterHandler(bot.HandlerTypeMessageText, "start", bot.MatchTypeCommand, bot_handler.StartHandler)
+	b.RegisterHandler(bot.HandlerTypeMessageText, "donate", bot.MatchTypeCommand, bot_handler.DonateHandler)
+
+	b.RegisterHandler(bot.HandlerTypeMessageText, "memories", bot.MatchTypeCommandStartOnly, bot_handler.MemoriesHandler)
+	b.RegisterHandler(bot.HandlerTypeMessageText, "clear", bot.MatchTypeCommand, bot_handler.ClearHandler)
+	b.RegisterHandler(bot.HandlerTypeMessageText, "reset", bot.MatchTypeCommand, bot_handler.ResetHandler)
+
+	b.RegisterHandler(bot.HandlerTypeMessageText, "share", bot.MatchTypeCommand, bot_handler.ShareHandler)
+	b.RegisterHandler(bot.HandlerTypeMessageText, "import", bot.MatchTypeCommand, bot_handler.ImportHandler)
+	b.RegisterHandler(bot.HandlerTypeMessageText, "export", bot.MatchTypeCommand, bot_handler.ExportHandler)
 
 	return &bot_impl
 }
@@ -55,56 +67,4 @@ func (b *botImpl) SendMessage(chatId int64, text string) {
 		ChatID: chatId,
 		Text:   text,
 	})
-}
-
-func handler(ctx context.Context, b *bot.Bot, update *models.Update) {
-	fmt.Println("ChatID:", update.Message.Chat.ID)
-	fmt.Println("Received Message:", update.Message.Text)
-	fmt.Println(json.MarshalIndent(*update, "", "  "))
-	b.SendMessage(ctx, &bot.SendMessageParams{
-		ChatID: update.Message.Chat.ID,
-		Text:   update.Message.Text,
-	})
-}
-
-func startHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
-	if update.Message != nil {
-		b.SendMessage(ctx, &bot.SendMessageParams{
-			ChatID: update.Message.Chat.ID,
-			Text:   "Welcome to the bot!",
-		})
-	}
-}
-
-func (b1 *botImpl) donateHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
-	fmt.Println("Stars handler triggered")
-	msg, err := b.SendInvoice(ctx, &bot.SendInvoiceParams{
-		ChatID:        update.Message.Chat.ID,
-		Title:         "Stars",
-		Description:   "Support us with stars!",
-		Payload:       "Hello",
-		ProviderToken: "",
-		Currency:      "XTR",
-		Prices: []models.LabeledPrice{
-			{
-				Label:  "Stars",
-				Amount: 1,
-			},
-			{
-				Label:  "Support",
-				Amount: 1,
-			},
-		},
-	})
-
-	if err != nil {
-		fmt.Println("Error sending invoice:", err)
-		return
-	}
-	jb, err := json.Marshal(msg)
-	if err != nil {
-		fmt.Println("Error marshalling invoice:", err)
-		return
-	}
-	fmt.Println("Invoice sent successfully:", string(jb))
 }
